@@ -1,5 +1,18 @@
-
-fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?output=csv")
-  .then(r=>r.text())
-  .then(t=>{ document.body.innerHTML = '<pre>'+t.replace(/</g,'&lt;')+'</pre>'; })
-  .catch(e=>{ document.body.textContent='CSV 로드 실패: '+e; });
+const SHEET_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?output=csv";
+const qs=s=>document.querySelector(s),fmt=n=>Number(n||0).toLocaleString();
+let csvRows=[],LS_KEY="local_submissions_v1";
+function getLocal(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch(e){return[]}}function setLocal(a){localStorage.setItem(LS_KEY,JSON.stringify(a));qs('#localInfo').textContent=`로컬 임시저장 ${a.length}건`}
+function parseDate(s){if(!s)return null;let[y,m,d]=String(s).split('-').map(Number);return new Date(y,m-1,d)}
+function within(row,asOf){if(!asOf)return true;let d=parseDate(row.status_date);return !d||d<=asOf}
+function loadCSV(url){return new Promise((res,rej)=>Papa.parse(url,{download:true,header:true,skipEmptyLines:true,complete:r=>res(r.data),error:rej}))}
+async function init(){try{csvRows=await loadCSV(SHEET_CSV_URL+"&t="+Date.now())}catch(e){csvRows=[]}qs('#asOfDate').valueAsDate=new Date();setLocal(getLocal());render()}
+function filters(){return{asOf:qs('#asOfDate').value?new Date(qs('#asOfDate').value):null,grade:qs('#gradeFilter').value,gender:qs('#genderFilter').value}}
+function merged(){return[...csvRows,...getLocal()]}function apply(rows,f){return rows.filter(r=>within(r,f.asOf)&&(!f.grade||String(r.grade)===f.grade)&&(!f.gender||r.gender===f.gender))}
+function stats(rows){let e=rows.filter(r=>r.status==='enrolled'),i=rows.filter(r=>r.status==='transfer_in'),o=rows.filter(r=>r.status==='transfer_out'),gc={1:0,2:0,3:0,4:0,5:0,6:0},gC={M:0,F:0},pv={1:{M:0,F:0},2:{M:0,F:0},3:{M:0,F:0},4:{M:0,F:0},5:{M:0,F:0},6:{M:0,F:0}};for(let r of e){gc[r.grade]++;gC[r.gender]++;pv[r.grade][r.gender]++}return{e:e.length,i:i.length,o:o.length,gc,gC,pv}}
+function render(){let f=filters(),rows=apply(merged(),f),s=stats(rows);qs('#statEnrolled').textContent=fmt(s.e);qs('#statIn').textContent=fmt(s.i);qs('#statOut').textContent=fmt(s.o);renderCharts(s);renderPivot(s.pv);renderTable(rows)}
+function renderCharts(s){if(window.gradeChart)window.gradeChart.destroy();window.gradeChart=new Chart(qs('#gradeBar'),{type:'bar',data:{labels:['1학년','2학년','3학년','4학년','5학년','6학년'],datasets:[{label:'재학생 수',data:[1,2,3,4,5,6].map(g=>s.gc[g]||0)}]},options:{responsive:true,plugins:{legend:{display:false}}}});if(window.genderChart)window.genderChart.destroy();window.genderChart=new Chart(qs('#genderPie'),{type:'pie',data:{labels:['남','여'],datasets:[{data:[s.gC.M||0,s.gC.F||0]}]},options:{responsive:true}})}
+function renderPivot(pv){let b=qs('#pivotTable tbody');b.innerHTML='';let m=0,f=0;for(let g=1;g<=6;g++){m+=pv[g].M;f+=pv[g].F;b.innerHTML+=`<tr><td>${g}학년</td><td>${fmt(pv[g].M)}</td><td>${fmt(pv[g].F)}</td><td>${fmt(pv[g].M+pv[g].F)}</td></tr>`}b.innerHTML+=`<tr><td><b>합계</b></td><td><b>${fmt(m)}</b></td><td><b>${fmt(f)}</b></td><td><b>${fmt(m+f)}</b></td></tr>`}
+function renderTable(rows){let b=qs('#dataTable tbody');b.innerHTML='';for(let r of rows)b.innerHTML+=`<tr><td>${r.grade}</td><td>${r.class}</td><td>${r.gender}</td><td>${r.status}</td><td>${r.status_date}</td><td>${r.name}</td><td>${r.note}</td></tr>`}
+qs('#asOfDate').addEventListener('change',render);qs('#gradeFilter').addEventListener('change',render);qs('#genderFilter').addEventListener('change',render);qs('#resetBtn').addEventListener('click',()=>{qs('#asOfDate').value='';qs('#gradeFilter').value='';qs('#genderFilter').value='';render()})
+qs('#transferForm').addEventListener('submit',async e=>{e.preventDefault();let fd=new FormData(e.target),row={student_id:'LOCAL-'+Date.now(),name:fd.get('name'),grade:Number(fd.get('grade')),class:Number(fd.get('class')),gender:fd.get('gender'),status:fd.get('status'),status_date:fd.get('status_date'),note:fd.get('note')};let a=getLocal();a.push(row);setLocal(a);render();try{await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(Object.fromEntries(fd.entries())).toString()});alert('등록 완료')}catch(err){alert('Netlify 전송 실패')}e.target.reset()})
+qs('#clearLocal').addEventListener('click',()=>{if(confirm('삭제?')){setLocal([]);render()}});init();
