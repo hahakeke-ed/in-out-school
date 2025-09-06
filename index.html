@@ -3,15 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>전출입/학년·성별 통계 대시보드(다년도)</title>
+    <title>전출입/학년·성별 통계 대시보드</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <header class="container">
-      <h1>전출입 현황 · 학년/성별 통계 (다년도)</h1>
-      <p class="muted small">학년도 선택 + baseline에 '학년도' 열 추가 지원</p>
+      <h1>전출입 현황 · 학년/성별 통계</h1>
+      <p class="muted small">학년도 선택 + baseline('학년도' 열) · 내보내기(엑셀/CSV)</p>
     </header>
 
     <section class="container card">
@@ -31,8 +32,10 @@
           </select>
         </label>
         <button id="resetBtn">필터 초기화</button>
+        <span class="flex-spacer"></span>
+        <button id="btnExportExcel">엑셀로 내보내기</button>
+        <button id="btnExportCSV">CSV로 내보내기</button>
       </div>
-      <p class="muted small">※ baseline 시트에 '학년도' 열을 추가하면 연도별 베이스라인을 관리할 수 있어요. (예: 2025, 2026, 2027)</p>
     </section>
 
     <section class="container grid-3">
@@ -55,6 +58,26 @@
       <h2>전출입 상세</h2>
       <table id="dataTable"><thead><tr><th>학년</th><th>반</th><th>성별</th><th>상태</th><th>일자</th><th>이름</th><th>비고</th></tr></thead><tbody></tbody></table>
     </section>
+
+    <section class="container card">
+      <h2>신규 전출입 등록</h2>
+      <form id="transferForm" name="transfer" method="POST" data-netlify="true" netlify-honeypot="bot-field">
+        <input type="hidden" name="form-name" value="transfer" />
+        <p class="hidden"><label>Don’t fill this out if you’re human: <input name="bot-field" /></label></p>
+        <div class="form-grid">
+          <label>이름<input name="name" /></label>
+          <label>학년<input name="grade" type="number" min="1" max="6" required /></label>
+          <label>반<input name="class" type="number" required /></label>
+          <label>성별<select name="gender"><option value="M">M</option><option value="F">F</option></select></label>
+          <label>상태<select name="status"><option value="transfer_in">전입</option><option value="transfer_out">전출</option><option value="enrolled">재학</option></select></label>
+          <label>일자<input name="status_date" type="date" required /></label>
+          <label class="span-2">비고<input name="note" /></label>
+        </div>
+        <div class="form-actions"><button type="submit">등록</button><button type="button" id="clearLocal">로컬 비우기</button><span class="muted small" id="localInfo"></span></div>
+      </form>
+    </section>
+
+    <footer class="container center muted small">© 2025</footer>
 
     <script src="app.js"></script>
   </body>
