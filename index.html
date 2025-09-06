@@ -13,73 +13,21 @@
   <body>
     <header class="container">
       <h1>전출입 현황 · 학년/성별 통계</h1>
-      <p class="muted small">학년도 선택 + baseline('학년도' 열) · 내보내기(엑셀/CSV)</p>
     </header>
-
     <section class="container card">
-      <div class="controls">
-        <label>학년도
-          <select id="yearSelect"></select>
-        </label>
-        <label>기준일 <input type="date" id="asOfDate" /></label>
-        <label>학년
-          <select id="gradeFilter">
-            <option value="">전체</option><option value="1">1학년</option><option value="2">2학년</option><option value="3">3학년</option><option value="4">4학년</option><option value="5">5학년</option><option value="6">6학년</option>
-          </select>
-        </label>
-        <label>성별
-          <select id="genderFilter">
-            <option value="">전체</option><option value="M">남</option><option value="F">여</option>
-          </select>
-        </label>
-        <button id="resetBtn">필터 초기화</button>
-        <span class="flex-spacer"></span>
-        <button id="btnExportExcel">엑셀로 내보내기</button>
-        <button id="btnExportCSV">CSV로 내보내기</button>
-      </div>
-    </section>
-
-    <section class="container grid-3">
-      <div class="stat card"><div class="stat-title">총 재학생</div><div class="stat-value" id="statEnrolled">0</div></div>
-      <div class="stat card"><div class="stat-title">전입 (누계)</div><div class="stat-value" id="statIn">0</div></div>
-      <div class="stat card"><div class="stat-title">전출 (누계)</div><div class="stat-value" id="statOut">0</div></div>
-    </section>
-
-    <section class="container grid-2">
-      <div class="card"><h2>학년별 인원</h2><canvas id="gradeBar"></canvas></div>
-      <div class="card"><h2>성별 분포</h2><canvas id="genderPie"></canvas></div>
-    </section>
-
-    <section class="container card">
-      <h2>학년×성별 교차표</h2>
-      <table id="pivotTable"><thead><tr><th>학년</th><th>남</th><th>여</th><th>합계</th></tr></thead><tbody></tbody></table>
-    </section>
-
-    <section class="container card">
-      <h2>전출입 상세</h2>
-      <table id="dataTable"><thead><tr><th>학년</th><th>반</th><th>성별</th><th>상태</th><th>일자</th><th>이름</th><th>비고</th></tr></thead><tbody></tbody></table>
-    </section>
-
-    <section class="container card">
-      <h2>신규 전출입 등록</h2>
-      <form id="transferForm" name="transfer" method="POST" data-netlify="true" netlify-honeypot="bot-field">
-        <input type="hidden" name="form-name" value="transfer" />
-        <p class="hidden"><label>Don’t fill this out if you’re human: <input name="bot-field" /></label></p>
-        <div class="form-grid">
-          <label>이름<input name="name" /></label>
-          <label>학년<input name="grade" type="number" min="1" max="6" required /></label>
-          <label>반<input name="class" type="number" required /></label>
-          <label>성별<select name="gender"><option value="M">M</option><option value="F">F</option></select></label>
-          <label>상태<select name="status"><option value="transfer_in">전입</option><option value="transfer_out">전출</option><option value="enrolled">재학</option></select></label>
-          <label>일자<input name="status_date" type="date" required /></label>
-          <label class="span-2">비고<input name="note" /></label>
-        </div>
-        <div class="form-actions"><button type="submit">등록</button><button type="button" id="clearLocal">로컬 비우기</button><span class="muted small" id="localInfo"></span></div>
+      <h2>신규 전출입 등록 (GAS CORS-safe)</h2>
+      <form id="transferForm">
+        <label>이름 <input name="name" /></label>
+        <label>학년 <input name="grade" type="number" min="1" max="6" required/></label>
+        <label>반 <input name="class" type="number" required/></label>
+        <label>성별 <select name="gender"><option value="M">M</option><option value="F">F</option></select></label>
+        <label>상태 <select name="status"><option value="transfer_in">전입</option><option value="transfer_out">전출</option><option value="enrolled">재학</option></select></label>
+        <label>일자 <input name="status_date" type="date" required/></label>
+        <label>비고 <input name="note"/></label>
+        <button type="submit">등록</button>
       </form>
+      <pre id="log" class="muted small"></pre>
     </section>
-
-    <footer class="container center muted small">© 2025</footer>
-
     <script src="app.js"></script>
   </body>
 </html>
