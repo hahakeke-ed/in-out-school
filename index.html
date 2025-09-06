@@ -8,13 +8,12 @@
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <!-- config.js는 반드시 app.js보다 먼저 불러옵니다. -->
     <script src="config.js"></script>
   </head>
-  <body>
-    <header class="container">
+  <body class="dark">
+    <header class="container header-bar">
       <h1>전출입 현황 · 학년/성별 통계</h1>
-      <p class="muted small">학년도 선택 · baseline('학년도' 열) · 내보내기(엑셀/CSV) · Google Apps Script 연동</p>
+      <button id="themeToggle" class="theme-btn" title="테마 전환">🌙</button>
     </header>
 
     <section class="container card">
@@ -76,7 +75,6 @@
         </div>
         <div class="form-actions"><button type="submit">등록</button><button type="button" id="clearLocal">로컬 비우기</button><span class="muted small" id="localInfo"></span></div>
       </form>
-      <p class="muted small">연동: 로컬 통계 즉시 반영 → (선택) Netlify Forms → Google Apps Script(구글시트)</p>
     </section>
 
     <footer class="container center muted small">© 2025</footer>

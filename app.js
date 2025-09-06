@@ -11,6 +11,7 @@ const asOf=qs('#asOfDate'), yearSel=qs('#yearSelect'), gSel=qs('#gradeFilter'), 
 const statE=qs('#statEnrolled'), statI=qs('#statIn'), statO=qs('#statOut');
 const tb=document.querySelector('#dataTable tbody'), pv=document.querySelector('#pivotTable tbody');
 const form=qs('#transferForm'), localInfo=qs('#localInfo');
+const themeBtn=document.getElementById('themeToggle');
 let rows=[], base=[], charts={bar:null,pie:null};
 
 // 번역
@@ -21,10 +22,16 @@ function parseDate(s){ if(!s) return null; const [y,m,d]=String(s).split('-').ma
 function within(r,asOf){ if(!asOf) return true; const d=parseDate(r.status_date); return !d||d<=asOf; }
 function loadCSV(u){ return new Promise((res,rej)=>Papa.parse(u,{download:true,header:true,skipEmptyLines:true,complete:r=>res(r.data),error:rej})); }
 
+function applyTheme(initial=false){ const saved=localStorage.getItem('theme')||'dark';
+  document.body.classList.remove('light','dark'); document.body.classList.add(saved);
+  themeBtn.textContent = saved==='dark' ? '🌙' : '☀️';
+}
+themeBtn.addEventListener('click',()=>{ const cur=document.body.classList.contains('dark')?'dark':'light'; const next=cur==='dark'?'light':'dark'; localStorage.setItem('theme', next); applyTheme(); });
+
 async function init(){
+  applyTheme(true);
   rows = await loadCSV(SHEET_CSV_URL+'&t='+Date.now()) || [];
   base = await loadCSV(BASELINE_CSV_URL+'&t='+Date.now()) || [];
-  // 학년도 목록
   let years = base.map(r=>Number(r['학년도']||r['year'])).filter(Boolean);
   if(years.length===0){ const ds=rows.map(r=>parseDate(r.status_date)).filter(Boolean); years = ds.map(academicYearFromDate); }
   if(years.length===0) years=[new Date().getFullYear()];
@@ -64,8 +71,9 @@ function renderTable(rs){ tb.innerHTML=''; const s=[...rs].sort((a,b)=>{ const d
   for(const r of s) tb.innerHTML+=`<tr><td>${r.grade??''}</td><td>${r.class??''}</td><td>${tGender(r.gender)}</td><td>${tStatus(r.status)}</td><td>${r.status_date??''}</td><td>${r.name??''}</td><td>${r.note??''}</td></tr>`; }
 
 function renderCharts(s){ if(charts.bar) charts.bar.destroy(); if(charts.pie) charts.pie.destroy();
-  charts.bar=new Chart(document.getElementById('gradeBar'),{type:'bar',data:{labels:['1학년','2학년','3학년','4학년','5학년','6학년'],datasets:[{label:'재학생 수',data:[1,2,3,4,5,6].map(g=>s.gc[g]||0)}]},options:{responsive:true,plugins:{legend:{display:false}}}});
-  charts.pie=new Chart(document.getElementById('genderPie'),{type:'pie',data:{labels:['남','여'],datasets:[{data:[s.gC.M||0,s.gC.F||0]}]},options:{responsive:true}});
+  const color = getComputedStyle(document.body).getPropertyValue('--fg').trim() || '#e5e5e5';
+  charts.bar=new Chart(document.getElementById('gradeBar'),{type:'bar',data:{labels:['1학년','2학년','3학년','4학년','5학년','6학년'],datasets:[{label:'재학생 수',data:[1,2,3,4,5,6].map(g=>s.gc[g]||0)}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:color}},y:{ticks:{color:color}}}}});
+  charts.pie=new Chart(document.getElementById('genderPie'),{type:'pie',data:{labels:['남','여'],datasets:[{data:[s.gC.M||0,s.gC.F||0]}]},options:{responsive:true,plugins:{legend:{labels:{color:color}}}}});
 }
 
 // ====== 내보내기 ======
@@ -76,6 +84,7 @@ function toAOA_Pivot(s){ const rows=[['학년','남','여','합계']]; for(let g
 function toAOA_Events(rs){ const head=['학년','반','성별','상태','일자','이름','비고']; const rows=[head]; for(const r of rs) rows.push([r.grade||'',r.class||'',tGender(r.gender)||'',tStatus(r.status)||'',r.status_date||'',r.name||'',r.note||'']); return rows; }
 function downloadExcel(){ const f=filters(), s=compute(f), rs=eventsFor(f); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(toAOA_Summary(s,f)),'요약'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(toAOA_GradeCounts(s)),'학년별'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(toAOA_GenderCounts(s)),'성별'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(toAOA_Pivot(s)),'피벗'); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(toAOA_Events(rs)),'전출입상세'); const ts=new Date().toISOString().replace(/[:T]/g,'-').slice(0,16); XLSX.writeFile(wb, `dashboard_${f.year}_${ts}.xlsx`); }
 function downloadCSV(){ const f=filters(), s=compute(f), rs=eventsFor(f); const lines=[]; const push=a=>lines.push(a.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(',')); push(['학년도', f.year]); push(['기준일', f.asOf?f.asOf.toISOString().slice(0,10):'전체']); lines.push(''); push(['총 재학생', s.e]); push(['전입(누계)', s.i]); push(['전출(누계)', s.o]); lines.push(''); push(['학년','남','여','합계']); for(let g=1; g<=6; g++){ const M=s.pv[g]?.M||0,F=s.pv[g]?.F||0; push([g+'학년',M,F,M+F]); } lines.push(''); push(['학년','반','성별','상태','일자','이름','비고']); for(const r of rs) push([r.grade||'',r.class||'',tGender(r.gender)||'',tStatus(r.status)||'',r.status_date||'',r.name||'',r.note||'']); const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); const ts=new Date().toISOString().replace(/[:T]/g,'-').slice(0,16); a.download=`dashboard_${f.year}_${ts}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+
 document.getElementById('btnExportExcel').addEventListener('click', downloadExcel);
 document.getElementById('btnExportCSV').addEventListener('click', downloadCSV);
 
@@ -93,12 +102,9 @@ resetBtn.addEventListener('click',()=>{ asOf.value=''; gSel.value=''; sexSel.val
 form.addEventListener('submit', async e=>{ e.preventDefault(); const fd=new FormData(form);
   const row={student_id:'LOCAL-'+Date.now(), name:fd.get('name')||'', grade:Number(fd.get('grade')), class:Number(fd.get('class')), gender:fd.get('gender'),
               status:fd.get('status'), status_date:fd.get('status_date'), note:fd.get('note')||''};
-  // 1) 로컬 반영
   const a=getLocal(); a.push(row); setLocal(a); render();
-  // 2) GAS로 전송
   const r = await postToGAS(row);
   if(r.ok) alert('구글시트 반영 성공'); else alert('구글시트 반영 실패: '+(r.reason||r.status));
-  // 폼 초기화는 성공/실패와 무관하게 사용자의 선택—여기선 성공 시만 초기화
   if(r.ok) e.target.reset();
 });
 
