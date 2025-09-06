@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Excel 내보내기용 SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <header class="container">
@@ -28,7 +30,11 @@
           </select>
         </label>
         <button id="resetBtn">필터 초기화</button>
+        <span class="flex-spacer"></span>
+        <button id="btnExportExcel">엑셀로 내보내기</button>
+        <button id="btnExportCSV">CSV로 내보내기</button>
       </div>
+      <p class="muted small">※ 내보내기는 현재 화면의 필터/기준일을 반영한 스냅샷으로 생성됩니다.</p>
     </section>
 
     <section class="container grid-3">
