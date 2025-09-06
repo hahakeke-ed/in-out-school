@@ -1,79 +1,67 @@
-// ===== 설정 =====
-const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?gid=408307557&single=true&output=csv"; // students 탭 CSV
-const BASELINE_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?gid=1708903695&single=true&output=csv"; // baseline 탭 CSV
+const SHEET_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?gid=408307557&single=true&output=csv";
+const BASELINE_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vSW-NQvM_hYkajd1ZYyzWWGbx0qnUFMC9rlWeVLwSla5Xwovivh4Xp9y_bN73fg4Ab4-uidhJP63rzx/pub?gid=1708903695&single=true&output=csv";
 
-// ===== 유틸 =====
-const qs = s=>document.querySelector(s), fmt=n=>Number(n||0).toLocaleString();
-const encode = data => Object.keys(data).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(data[k]??'')).join('&');
-const asOfInput=qs('#asOfDate'), gradeSel=qs('#gradeFilter'), genderSel=qs('#genderFilter'), csvInput=qs('#csvFile'), resetBtn=qs('#resetBtn');
-const statEnrolled=qs('#statEnrolled'), statIn=qs('#statIn'), statOut=qs('#statOut');
-const tbody=document.querySelector('#dataTable tbody'), pivotBody=document.querySelector('#pivotTable tbody');
-const form=qs('#transferForm'), clearLocalBtn=qs('#clearLocal'), localInfo=qs('#localInfo');
-let csvRows=[], baselineRows=[];
-function getLocal(){ try{return JSON.parse(localStorage.getItem('local_submissions_v1')||'[]')}catch(e){return[]}}
+const qs=s=>document.querySelector(s), fmt=n=>Number(n||0).toLocaleString();
+const encode=d=>Object.keys(d).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(d[k]??'')).join('&');
+const asOf=qs('#asOfDate'), grade=qs('#gradeFilter'), gender=qs('#genderFilter'), resetBtn=qs('#resetBtn');
+const statE=qs('#statEnrolled'), statI=qs('#statIn'), statO=qs('#statOut');
+const tb=document.querySelector('#dataTable tbody'), pv=document.querySelector('#pivotTable tbody');
+const form=qs('#transferForm'), localInfo=qs('#localInfo'); let charts={bar:null,pie:null};
+
+function getLocal(){ try{return JSON.parse(localStorage.getItem('local_submissions_v1')||'[]')}catch(e){return[]} }
 function setLocal(a){ localStorage.setItem('local_submissions_v1',JSON.stringify(a)); if(localInfo) localInfo.textContent=`로컬 임시저장 ${a.length}건`; }
-function parseDate(s){ if(!s) return null; const [y,m,d]=String(s).split('-').map(Number); return (!y||!m||!d)?null:new Date(y,m-1,d); }
-function withinAsOf(r,asOf){ if(!asOf) return true; const d=parseDate(r.status_date); return !d||d<=asOf; }
-function loadCSV(url){ return new Promise((res,rej)=>{ Papa.parse(url,{download:true,header:true,skipEmptyLines:true,complete:r=>res(r.data),error:rej}); }); }
-async function tryLoad(url){ try{ return await loadCSV(url+(url.includes('?')?'&':'?')+'t='+Date.now()); }catch(e){ return null; } }
+function parseDate(s){ if(!s)return null; const [y,m,d]=String(s).split('-').map(Number); return (!y||!m||!d)?null:new Date(y,m-1,d); }
+function within(r,d){ if(!d)return true; const t=parseDate(r.status_date); return !t||t<=d; }
+function loadCSV(u){ return new Promise((res,rej)=>Papa.parse(u,{download:true,header:true,skipEmptyLines:true,complete:r=>res(r.data),error:rej})); }
 
-// ===== 초기화 =====
-async function init(){ csvRows = (await tryLoad(SHEET_CSV_URL)) || []; baselineRows = (await tryLoad(BASELINE_CSV_URL)) || []; asOfInput.valueAsDate = new Date(); setLocal(getLocal()); render(); }
-function getFilters(){ return { asOf: asOfInput.value?new Date(asOfInput.value):null, grade: gradeSel.value, gender: genderSel.value }; }
-function mergedRows(){ return [...csvRows, ...getLocal()]; }
-function applyFilters(rows,{asOf,grade,gender}){ return rows.filter(r=>withinAsOf(r,asOf)&&(!grade||String(r.grade)===String(grade))&&(!gender||r.gender===gender)); }
-
-// ===== baseline 파싱 =====
-function normalizeBaselineRow(r){ const g = r.grade ?? r['학년']; const s = (r.gender ?? r['성별'] ?? '').toString().toUpperCase().trim(); const c = r.count ?? r['인원수'] ?? r['인원'] ?? 0; return { grade: Number(g), gender: s, count: Number(c) }; }
-
-// ===== 통계 계산 =====
-function computeWithBaseline(rows, baseRows, f){ const b = {1:{M:0,F:0},2:{M:0,F:0},3:{M:0,F:0},4:{M:0,F:0},5:{M:0,F:0},6:{M:0,F:0}};
-  for(const raw of baseRows){ const {grade,gender,count} = normalizeBaselineRow(raw);
-    if(b[grade] && (gender==='M'||gender==='F')){ if((!f.grade||String(f.grade)===String(grade)) && (!f.gender||f.gender===gender)){ b[grade][gender]+=Number(count||0); } }
-  }
-  let inCnt=0,outCnt=0; const evts=applyFilters(rows,f);
-  for(const r of evts){ if(r.status==='transfer_in'){ inCnt++; if(b[r.grade] && (r.gender==='M'||r.gender==='F')) b[r.grade][r.gender]+=1; }
-                        else if(r.status==='transfer_out'){ outCnt++; if(b[r.grade] && (r.gender==='M'||r.gender==='F')) b[r.grade][r.gender]-=1; } }
-  const gradeCounts={1:0,2:0,3:0,4:0,5:0,6:0}, genderCounts={M:0,F:0};
-  for(let g=1; g<=6; g++){ gradeCounts[g]=b[g].M+b[g].F; genderCounts.M+=b[g].M; genderCounts.F+=b[g].F; }
-  const enrolledCount=Object.values(gradeCounts).reduce((a,v)=>a+v,0);
-  return { enrolledCount, transferInCount: inCnt, transferOutCount: outCnt, gradeCounts, genderCounts, pivot:b };
+async function init(){
+  try{ window._rows=await loadCSV(SHEET_CSV_URL+'&t='+Date.now()); }catch(e){ window._rows=[]; }
+  try{ window._base=await loadCSV(BASELINE_CSV_URL+'&t='+Date.now()); }catch(e){ window._base=[]; }
+  asOf.valueAsDate=new Date(); setLocal(getLocal()); render();
 }
 
-// ===== 렌더링 =====
-function render(){ const f=getFilters(), rows=mergedRows();
-  const st = (baselineRows && baselineRows.length>0) ? computeWithBaseline(rows, baselineRows, f)
-                                                     : { enrolledCount:0, transferInCount:0, transferOutCount:0, gradeCounts:{1:0,2:0,3:0,4:0,5:0,6:0}, genderCounts:{M:0,F:0}, pivot:{1:{M:0,F:0},2:{M:0,F:0},3:{M:0,F:0},4:{M:0,F:0},5:{M:0,F:0},6:{M:0,F:0}} };
-  statEnrolled.textContent = fmt(st.enrolledCount); statIn.textContent=fmt(st.transferInCount); statOut.textContent=fmt(st.transferOutCount);
-  renderCharts(st); renderPivot(st.pivot); renderTable(applyFilters(rows,f)); }
+function filters(){ return {asOf:asOf.value?new Date(asOf.value):null, grade:grade.value, gender:gender.value}; }
+function merged(){ return [...(window._rows||[]), ...getLocal()]; }
+function apply(rs,f){ return rs.filter(r=>within(r,f.asOf)&&(!f.grade||String(r.grade)===String(f.grade))&&(!f.gender||r.gender===f.gender)); }
+function normB(r){ const g=r.grade??r['학년']; const s=(r.gender??r['성별']??'').toString().toUpperCase().trim(); const c=r.count??r['인원수']??r['인원']??0; return {grade:Number(g),gender:s,count:Number(c)}; }
 
-function renderPivot(pv){ pivotBody.innerHTML=''; let m=0,f=0;
-  for(let g=1; g<=6; g++){ const M=pv[g]?.M||0, F=pv[g]?.F||0; m+=M; f+=F;
-    pivotBody.innerHTML += `<tr><td>${g}학년</td><td>${fmt(M)}</td><td>${fmt(F)}</td><td>${fmt(M+F)}</td></tr>`; }
-  pivotBody.innerHTML += `<tr><td><b>합계</b></td><td><b>${fmt(m)}</b></td><td><b>${fmt(f)}</b></td><td><b>${fmt(m+f)}</b></td></tr>`; }
+function compute(f){
+  const b={1:{M:0,F:0},2:{M:0,F:0},3:{M:0,F:0},4:{M:0,F:0},5:{M:0,F:0},6:{M:0,F:0}};
+  for(const r of (window._base||[])){ const x=normB(r); if(b[x.grade]&&(x.gender==='M'||x.gender==='F')){ if((!f.grade||String(f.grade)===String(x.grade))&&(!f.gender||f.gender===x.gender)) b[x.grade][x.gender]+=x.count; } }
+  let i=0,o=0; for(const r of apply(merged(),f)){ if(r.status==='transfer_in'){i++; if(b[r.grade]&&(r.gender==='M'||r.gender==='F')) b[r.grade][r.gender]+=1; }
+                                               else if(r.status==='transfer_out'){o++; if(b[r.grade]&&(r.gender==='M'||r.gender==='F')) b[r.grade][r.gender]-=1; } }
+  const gc={1:0,2:0,3:0,4:0,5:0,6:0}, gC={M:0,F:0};
+  for(let g=1; g<=6; g++){ gc[g]=b[g].M+b[g].F; gC.M+=b[g].M; gC.F+=b[g].F; }
+  return { e:Object.values(gc).reduce((a,v)=>a+v,0), i, o, gc, gC, pv:b };
+}
 
-function renderCharts(st){ const gradeCtx=document.getElementById('gradeBar'), genderCtx=document.getElementById('genderPie');
-  const labels=['1학년','2학년','3학년','4학년','5학년','6학년']; const data=[1,2,3,4,5,6].map(g=>st.gradeCounts[g]||0);
-  if(window.gradeChart) window.gradeChart.destroy();
-  window.gradeChart=new Chart(gradeCtx,{type:'bar',data:{labels,datasets:[{label:'재학생 수',data}]},options:{responsive:true,plugins:{legend:{display:false}}}});
-  if(window.genderChart) window.genderChart.destroy();
-  window.genderChart=new Chart(genderCtx,{type:'pie',data:{labels:['남(M)','여(F)'],datasets:[{data:[st.genderCounts.M||0, st.genderCounts.F||0]}]},options:{responsive:true}}); }
+function render(){
+  const f=filters(), s=compute(f);
+  statE.textContent=fmt(s.e); statI.textContent=fmt(s.i); statO.textContent=fmt(s.o);
+  renderCharts(s); renderPivot(s.pv); renderTable(apply(merged(),f));
+}
 
-function renderTable(rows){ const tb=document.querySelector('#dataTable tbody'); tb.innerHTML='';
-  const sorted=[...rows].sort((a,b)=>{ const da=parseDate(a.status_date)||new Date(0), db=parseDate(b.status_date)||new Date(0);
-    if(db-da!==0) return db-da; if(Number(a.grade)-Number(b.grade)!==0) return Number(a.grade)-Number(b.grade); return Number(a.class)-Number(b.class); });
-  for(const r of sorted){ const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r.grade??''}</td><td>${r.class??''}</td><td>${r.gender??''}</td><td>${r.status??''}</td><td>${r.status_date??''}</td><td>${r.name??''}</td><td>${r.note??''}</td>`;
-    tb.appendChild(tr); } }
+function renderPivot(p){ pv.innerHTML=''; let m=0,f=0; for(let g=1; g<=6; g++){ const M=p[g]?.M||0, F=p[g]?.F||0; m+=M; f+=F;
+  pv.innerHTML+=`<tr><td>${g}학년</td><td>${fmt(M)}</td><td>${fmt(F)}</td><td>${fmt(M+F)}</td></tr>` } pv.innerHTML+=`<tr><td><b>합계</b></td><td><b>${fmt(m)}</b></td><td><b>${fmt(f)}</b></td><td><b>${fmt(m+f)}</b></td></tr>`; }
 
-[asOfInput, gradeSel, genderSel].forEach(el=>el&&el.addEventListener('change',render));
-resetBtn && resetBtn.addEventListener('click',()=>{ asOfInput.value=''; gradeSel.value=''; genderSel.value=''; render(); });
-csvInput && csvInput.addEventListener('change',e=>{ const f=e.target.files?.[0]; if(!f) return; Papa.parse(f,{header:true,skipEmptyLines:true,complete:r=>{csvRows=r.data; render();}}) });
-form && form.addEventListener('submit', async e=>{ e.preventDefault();
-  const fd=new FormData(form);
-  const row={student_id:'LOCAL-'+Date.now(),name:fd.get('name')||'',grade:Number(fd.get('grade')),class:Number(fd.get('class')),gender:fd.get('gender'),status:fd.get('status'),status_date:fd.get('status_date'),note:fd.get('note')||''};
+function renderTable(rs){ tb.innerHTML=''; const s=[...rs].sort((a,b)=>{ const da=parseDate(a.status_date)||new Date(0), db=parseDate(b.status_date)||new Date(0);
+  if(db-da!==0) return db-da; if(Number(a.grade)-Number(b.grade)!==0) return Number(a.grade)-Number(b.grade); return Number(a.class)-Number(b.class); });
+  for(const r of s) tb.innerHTML+=`<tr><td>${r.grade??''}</td><td>${r.class??''}</td><td>${r.gender??''}</td><td>${r.status??''}</td><td>${r.status_date??''}</td><td>${r.name??''}</td><td>${r.note??''}</td></tr>`; }
+
+function renderCharts(s){ if(charts.bar) charts.bar.destroy(); if(charts.pie) charts.pie.destroy();
+  charts.bar=new Chart(document.getElementById('gradeBar'),{type:'bar',data:{labels:['1학년','2학년','3학년','4학년','5학년','6학년'],datasets:[{label:'재학생 수',data:[1,2,3,4,5,6].map(g=>s.gc[g]||0)}]},options:{responsive:true,plugins:{legend:{display:false}}}});
+  charts.pie=new Chart(document.getElementById('genderPie'),{type:'pie',data:{labels:['남(M)','여(F)'],datasets:[{data:[s.gC.M||0,s.gC.F||0]}]},options:{responsive:true}});
+}
+
+[asOf,grade,gender].forEach(el=>el.addEventListener('change',render));
+resetBtn.addEventListener('click',()=>{ asOf.value=''; grade.value=''; gender.value=''; render(); });
+
+form.addEventListener('submit',async e=>{ e.preventDefault(); const fd=new FormData(form);
+  const row={student_id:'LOCAL-'+Date.now(), name:fd.get('name')||'', grade:Number(fd.get('grade')), class:Number(fd.get('class')), gender:fd.get('gender'),
+              status:fd.get('status'), status_date:fd.get('status_date'), note:fd.get('note')||''};
   const a=getLocal(); a.push(row); setLocal(a); render();
-  try{ await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:encode({'form-name':'transfer',...Object.fromEntries(fd.entries())})}); alert('등록 완료! (대시보드 반영 + Netlify Forms 전송)'); form.reset(); }
-  catch(err){ console.error(err); alert('Netlify 전송은 실패했지만, 이 기기에서는 통계가 반영되었습니다.'); }
+  try{ await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:encode({'form-name':'transfer',...Object.fromEntries(fd.entries())})}); alert('등록 완료!'); form.reset(); }
+  catch(err){ console.error(err); alert('Netlify 전송 실패(로컬 통계는 반영됨)'); }
 });
+
 init();
